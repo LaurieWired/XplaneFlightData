@@ -25,10 +25,6 @@ make non-compliant
 ```bash
 # Launch the MFD (requires X-Plane with Web API)
 ./run_mfd.sh
-
-# Or manually
-source myenv/bin/activate
-python3 aircraft_mfd.py
 ```
 
 ## Calculators
