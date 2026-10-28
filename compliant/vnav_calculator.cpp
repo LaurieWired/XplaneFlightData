@@ -1,126 +1,114 @@
 // VNAV Calculator for X-Plane MFD
 // JSF AV C++ Coding Standard Compliant Version
-// 
+//
 // Calculates vertical navigation parameters:
 // - Top of Descent (TOD) distance
 // - Required vertical speed for path
 // - Flight path angle
 // - Time to altitude constraint
-// 
-// JSF Compliance:
-// - AV Rule 208: No exceptions (throw/catch/try)
-// - AV Rule 209: Fixed-width types (Int32, Float64)
-// - AV Rule 206: No dynamic memory allocation
-// - AV Rule 119: No recursion
-// - AV Rule 52: Constants in lowercase
-// - AV Rule 113: Single exit point
-// - AV Rule 126: C++ style comments only (//)
-// 
-// Compile: g++ -std=c++20 -O3 -o vnav_calculator vnav_calculator.cpp
-// 
-// Usage: ./vnav_calculator <current_alt_ft> <target_alt_ft> <distance_nm> <groundspeed_kts> <current_vs_fpm>
 
-#include <iostream>
+#include "xplane_mfd_calc.h"
 #include <cmath>
+#include <cstdint>
 #include <iomanip>
-#include <cstdlib>
-#include <numbers>
-#include <jsf_types.h>
+#include <iostream>
 
-namespace xplane_mfd::calc {
+namespace airv
+{
+namespace calc
+{
+// Mathematical constants
+constexpr double three_deg_rad = 3.0 * units::deg_to_rad;
 
-// Error codes (AV Rule 52: lowercase)
-const Int32 error_success = 0;
-const Int32 error_invalid_args = 1;
-const Int32 error_parse_failed = 2;
+// Calculation constants
+constexpr double vs_conversion_factor = 101.27;  // Converts GS*tan(gamma) to VS in fpm
+constexpr double min_distance_nm      = 0.01;
+constexpr double min_groundspeed_kts  = 1.0;
+constexpr double min_vs_for_time_calc = 1.0;
+constexpr double infinite_time        = 999.9;
+constexpr double zero_distance        = 0.0;
+constexpr double thousand_feet        = 1000.0;
 
-// Mathematical constants (AV Rule 52: lowercase)
-const Float64 deg_to_rad = std::numbers::pi / 180.0;
-const Float64 rad_to_deg = 180.0 / std::numbers::pi;
-const Float64 nm_to_ft = 6076.12;
-const Float64 three_deg_rad = 3.0 * deg_to_rad;
-
-// Calculation constants (AV Rule 151: no magic numbers)
-const Float64 vs_conversion_factor = 101.27;  // Converts GS*tan(γ) to VS in fpm
-const Float64 min_distance_nm = 0.01;
-const Float64 min_groundspeed_kts = 1.0;
-const Float64 min_vs_for_time_calc = 1.0;
-const Float64 infinite_time = 999.9;
-const Float64 zero_distance = 0.0;
-const Float64 thousand_feet = 1000.0;
-
-// JSF-compliant parse function
-bool parse_float64(const char* str, Float64& result) {
-    char* end = nullptr;
-    result = strtod(str, &end);
-    return (end != str && *end == '\0');
-}
-
-struct VNAVData {
-    Float64 altitude_to_lose_ft;      // Altitude change required
-    Float64 flight_path_angle_deg;    // Flight path angle (negative = descent)
-    Float64 required_vs_fpm;          // Required vertical speed
-    Float64 tod_distance_nm;          // Top of descent distance (for 3° path)
-    Float64 time_to_constraint_min;   // Time to reach altitude at current VS
-    Float64 distance_per_1000ft;      // Distance traveled per 1000 ft altitude change
-    Float64 vs_for_3deg;              // Vertical speed required for 3° path
-    bool is_descent;                  // True if descending, false if climbing
+struct VNAVData
+{
+    double altitude_to_lose_ft;     // Altitude change required
+    double flight_path_angle_deg;   // Flight path angle (negative = descent)
+    double required_vs_fpm;         // Required vertical speed
+    double tod_distance_nm;         // Top of descent distance (for 3 deg path)
+    double time_to_constraint_min;  // Time to reach altitude at current VS
+    double distance_per_1000ft;     // Distance traveled per 1000 ft altitude change
+    double vs_for_3deg;             // Vertical speed required for 3 deg path
+    bool is_descent;                // True if descending, false if climbing
 };
 
 // Calculate VNAV parameters
-VNAVData calculate_vnav(Float64 current_alt_ft, Float64 target_alt_ft, 
-                        Float64 distance_nm, Float64 groundspeed_kts, Float64 current_vs_fpm) {
+VNAVData calculate_vnav(double current_alt_ft,   // Current altitude (feet)
+                        double target_alt_ft,    // Target altitude (feet)
+                        double distance_nm,      // Distance to constraint (nautical miles)
+                        double groundspeed_kts,  // Groundspeed (knots)
+                        double current_vs_fpm)   // Current vertical speed (feet per minute)
+{
     VNAVData result;
-    
+
     // Calculate altitude change (positive = climb, negative = descend)
-    Float64 altitude_change_ft = target_alt_ft - current_alt_ft;
+    double altitude_change_ft  = target_alt_ft - current_alt_ft;
     result.altitude_to_lose_ft = -altitude_change_ft;  // Legacy field name
-    result.is_descent = altitude_change_ft < zero_distance;
-    
+    result.is_descent          = altitude_change_ft < zero_distance;
+
     // Avoid division by zero
-    if (distance_nm < min_distance_nm) distance_nm = min_distance_nm;
-    if (groundspeed_kts < min_groundspeed_kts) groundspeed_kts = min_groundspeed_kts;
-    
+    if (distance_nm < min_distance_nm)
+        distance_nm = min_distance_nm;
+    if (groundspeed_kts < min_groundspeed_kts)
+        groundspeed_kts = min_groundspeed_kts;
+
     // Calculate flight path angle (positive = climb, negative = descent)
-    Float64 distance_ft = distance_nm * nm_to_ft;
-    Float64 gamma_rad = atan(altitude_change_ft / distance_ft);
-    result.flight_path_angle_deg = gamma_rad * rad_to_deg;
-    
+    double distance_ft           = distance_nm * units::nm_to_ft;
+    double gamma_rad             = atan(altitude_change_ft / distance_ft);
+    result.flight_path_angle_deg = gamma_rad * units::rad_to_deg;
+
     // Required vertical speed to meet constraint
-    // VS = 101.27 * GS * tan(γ)
+    // VS = 101.27 * GS * tan(gamma)
     result.required_vs_fpm = vs_conversion_factor * groundspeed_kts * tan(gamma_rad);
-    
-    // Calculate TOD for standard 3° descent path
-    // D = h / (6076 * tan(3°)) or simplified: h / 319
-    Float64 abs_alt_change = fabs(altitude_change_ft);
-    result.tod_distance_nm = abs_alt_change / (nm_to_ft * tan(three_deg_rad));
-    
-    // Vertical speed for 3° descent: VS ≈ 5 * GS (rule of thumb)
-    // More precisely: VS = 101.27 * GS * tan(3°) ≈ 5.3 * GS
+
+    // Calculate TOD for standard 3 deg descent path
+    // D = h / (6076 * tan(3 deg)) or simplified: h / 319
+    double abs_alt_change  = fabs(altitude_change_ft);
+    result.tod_distance_nm = abs_alt_change / (units::nm_to_ft * tan(three_deg_rad));
+
+    // Vertical speed for 3 deg descent: VS is almost 5 * GS (rule of thumb)
+    // More precisely: VS = 101.27 * GS * tan(3 deg) is almost 5.3 * GS
     result.vs_for_3deg = vs_conversion_factor * groundspeed_kts * tan(three_deg_rad);
-    if (!result.is_descent) {
+    if (!result.is_descent)
+    {
         result.vs_for_3deg = -result.vs_for_3deg;  // Make positive for climb
     }
-    
+
     // Time to reach constraint at current vertical speed
-    if (fabs(current_vs_fpm) > min_vs_for_time_calc) {
+    if (fabs(current_vs_fpm) > min_vs_for_time_calc)
+    {
         result.time_to_constraint_min = altitude_change_ft / current_vs_fpm;
-    } else {
+    }
+    else
+    {
         result.time_to_constraint_min = infinite_time;
     }
-    
+
     // Distance per 1000 ft of altitude change
-    if (abs_alt_change > min_vs_for_time_calc) {
+    if (abs_alt_change > min_vs_for_time_calc)
+    {
         result.distance_per_1000ft = (distance_nm * thousand_feet) / abs_alt_change;
-    } else {
+    }
+    else
+    {
         result.distance_per_1000ft = zero_distance;
     }
-    
+
     return result;
 }
 
 // Output results as JSON
-void print_json(const VNAVData& vnav) {
+void print_json(const VNAVData& vnav)
+{
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "{\n";
     std::cout << "  \"altitude_to_lose_ft\": " << vnav.altitude_to_lose_ft << ",\n";
@@ -134,10 +122,12 @@ void print_json(const VNAVData& vnav) {
     std::cout << "}\n";
 }
 
-} // namespace xplane_mfd::calc
+}  // namespace calc
+}  // namespace airv
 
-void print_usage(const char* program_name) {
-    std::cerr << "Usage: " << program_name 
+void print_usage(const char* program_name)
+{
+    std::cerr << "Usage: " << program_name
               << " <current_alt_ft> <target_alt_ft> <distance_nm> <groundspeed_kts> <current_vs_fpm>\n\n";
     std::cerr << "Arguments:\n";
     std::cerr << "  current_alt_ft  : Current altitude (feet)\n";
@@ -150,47 +140,51 @@ void print_usage(const char* program_name) {
     std::cerr << "  (FL350 to 10000 ft, 100 NM, 450 kts GS, -1500 fpm)\n";
 }
 
-// AV Rule 113: Single exit point
-int main(int argc, char* argv[]) {
-    using namespace xplane_mfd::calc;
-    
-    Int32 return_code = error_success;  // Single exit point variable
-    
-    if (argc != 6) {
+int main(int argc,
+         char* argv[])
+{
+    if (argc != 6)
+    {
         print_usage(argv[0]);
-        return_code = error_invalid_args;
-    } else {
-        // Parse arguments
-        Float64 current_alt_ft;
-        Float64 target_alt_ft;
-        Float64 distance_nm;
-        Float64 groundspeed_kts;
-        Float64 current_vs_fpm;
-        
-        if (!parse_float64(argv[1], current_alt_ft)) {
-            std::cerr << "Error: Invalid current altitude\n";
-            return_code = error_parse_failed;
-        } else if (!parse_float64(argv[2], target_alt_ft)) {
-            std::cerr << "Error: Invalid target altitude\n";
-            return_code = error_parse_failed;
-        } else if (!parse_float64(argv[3], distance_nm)) {
-            std::cerr << "Error: Invalid distance\n";
-            return_code = error_parse_failed;
-        } else if (!parse_float64(argv[4], groundspeed_kts)) {
-            std::cerr << "Error: Invalid groundspeed\n";
-            return_code = error_parse_failed;
-        } else if (!parse_float64(argv[5], current_vs_fpm)) {
-            std::cerr << "Error: Invalid vertical speed\n";
-            return_code = error_parse_failed;
-        } else {
-            // Calculate VNAV data
-            VNAVData vnav = calculate_vnav(current_alt_ft, target_alt_ft, distance_nm, groundspeed_kts, current_vs_fpm);
-            
-            // Output JSON
-            print_json(vnav);
-            return_code = error_success;
-        }
+        return static_cast<int>(airv::Return_code::invalid_argc);
     }
-    
-    return return_code;  // Single exit point
+
+    // Parse arguments
+    double current_alt_ft;   // Current altitude (feet)
+    double target_alt_ft;    // Target altitude (feet)
+    double distance_nm;      // Distance to constraint (nautical miles)
+    double groundspeed_kts;  // Groundspeed (knots)
+    double current_vs_fpm;   // Current vertical speed (feet per minute)
+
+    if (!airv::utils::parse_double(argv[1], current_alt_ft))
+    {
+        std::cerr << "Error: Invalid current altitude\n";
+        return static_cast<int>(airv::Return_code::parse_failed);
+    }
+    if (!airv::utils::parse_double(argv[2], target_alt_ft))
+    {
+        std::cerr << "Error: Invalid target altitude\n";
+        return static_cast<int>(airv::Return_code::parse_failed);
+    }
+    if (!airv::utils::parse_double(argv[3], distance_nm))
+    {
+        std::cerr << "Error: Invalid distance\n";
+        return static_cast<int>(airv::Return_code::parse_failed);
+    }
+    if (!airv::utils::parse_double(argv[4], groundspeed_kts))
+    {
+        std::cerr << "Error: Invalid groundspeed\n";
+        return static_cast<int>(airv::Return_code::parse_failed);
+    }
+    if (!airv::utils::parse_double(argv[5], current_vs_fpm))
+    {
+        std::cerr << "Error: Invalid vertical speed\n";
+        return static_cast<int>(airv::Return_code::parse_failed);
+    }
+
+    // Calculate and output results
+    airv::calc::print_json(
+        airv::calc::calculate_vnav(current_alt_ft, target_alt_ft, distance_nm, groundspeed_kts, current_vs_fpm));
+
+    return static_cast<int>(airv::Return_code::success);
 }

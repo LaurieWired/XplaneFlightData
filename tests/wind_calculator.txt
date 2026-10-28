@@ -1,0 +1,7 @@
+{
+  "headwind": 15.00,
+  "crosswind": 0.00,
+  "total_wind": 15.00,
+  "wca": 0.00,
+  "drift": 5.00
+}

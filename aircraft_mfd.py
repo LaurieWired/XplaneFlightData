@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 X-Plane MFD (Multi-Function Display) - Real-time aircraft data visualization
 

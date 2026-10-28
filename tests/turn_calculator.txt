@@ -1,0 +1,10 @@
+{
+  "radius_nm": 1.95,
+  "radius_ft": 11867.19,
+  "turn_rate_dps": 2.04,
+  "lead_distance_nm": 1.95,
+  "lead_distance_ft": 11867.19,
+  "time_to_turn_sec": 44.18,
+  "load_factor": 1.10,
+  "standard_rate_bank": 34.48
+}

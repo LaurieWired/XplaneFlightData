@@ -1,0 +1,10 @@
+{
+  "altitude_to_lose_ft": 25000.00,
+  "flight_path_angle_deg": -2.36,
+  "required_vs_fpm": -1875.02,
+  "tod_distance_nm": 78.51,
+  "time_to_constraint_min": 16.67,
+  "distance_per_1000ft": 4.00,
+  "vs_for_3deg": 2388.30,
+  "is_descent": true
+}

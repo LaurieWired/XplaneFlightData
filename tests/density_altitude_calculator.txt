@@ -1,0 +1,10 @@
+{
+  "density_altitude_ft": 7388.72,
+  "pressure_altitude_ft": 5000.00,
+  "air_density_ratio": 0.80,
+  "temperature_deviation_c": 19.91,
+  "performance_loss_pct": 19.59,
+  "eas_kts": 152.45,
+  "tas_to_ias_ratio": 1.13,
+  "pressure_ratio": 0.83
+}

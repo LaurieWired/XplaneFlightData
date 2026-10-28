@@ -1,0 +1,33 @@
+{
+  "wind": {
+    "speed_kts": 22.16,
+    "direction_from": 195.53,
+    "headwind": 4.05,
+    "crosswind": 21.79,
+    "gust_factor": 0.01
+  },
+  "envelope": {
+    "stall_margin_pct": 82.98,
+    "vmo_margin_pct": 12.00,
+    "mmo_margin_pct": 20.73,
+    "min_margin_pct": 12.00,
+    "load_factor": 1.00,
+    "corner_speed_kts": 170.00
+  },
+  "energy": {
+    "specific_energy_ft": 37766.88,
+    "energy_rate_kts": -4.94,
+    "trend": -1
+  },
+  "glide": {
+    "still_air_range_nm": 69.12,
+    "wind_adjusted_range_nm": 68.00,
+    "glide_ratio": 12.00,
+    "best_glide_speed_kts": 78.00
+  },
+  "alternate_airports": {
+    "combinations_5_choose_2": 10,
+    "combinations_10_choose_3": 120,
+    "note": "Iterative binomial calculation (JSF-compliant, no recursion)"
+  }
+}
